@@ -48,6 +48,7 @@ Here are some important points:
 	+ out_box: If storing data in files, where do you want them written to?
 
 
+
 + In the "streams" section you have the option to explicitly list the EDC streams you want to collect data from. For each stream 
 	you need to specify its "ID" and provide a stream name:
 	
@@ -59,8 +60,9 @@ Here are some important points:
 
 	+ Example "streams" configuration section:
 	streams:	
+<p>
 	  - ID 	  : 1
 	    Name  : Facebook Keyword Search  
 	  - ID    : 3
     	    Name  : Google Plus Keyword Search
-
+</p>
