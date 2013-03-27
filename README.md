@@ -36,8 +36,9 @@ Configuration
 See the sample EDC_config.yaml file for an example of a EDC client configuration file.  
 
 Here are some important points:
+
 + In the "account" section, you specify the "machine name" used in the URL for your EDC.  EDCs have the following URL pattern:
-	https://machine_name.gnip.com
+    https://machine_name.gnip.com
 
 + In the "edc" section, you can specify the following processing options:
 	+ poll_interval: interval in seconds between EDC polls for new data.  Default is every 60 seconds.
@@ -46,7 +47,6 @@ Here are some important points:
 		If you are storing as files, the filename is based on the native activity "id" and the extension indicates the 
 		markup format (xml or json, although only xml is currently supported). 
 	+ out_box: If storing data in files, where do you want them written to?
-
 
 
 + In the "streams" section you have the option to explicitly list the EDC streams you want to collect data from. For each stream 
@@ -58,12 +58,13 @@ Here are some important points:
 	+ Name: a label given to the stream to help you identify the stream in the configuration file.  This name is echoed in standard output as the script runs.
 
 
-	+ Example "streams" configuration section:
-<code>
-	streams:	
+* Example "streams" configuration section:
 
+<code>
+
+	streams:	
 	  - ID 	  : 1
 	    Name  : Facebook Keyword Search  
 	  - ID    : 3
-    	    Name  : Google Plus Keyword Search
+    	Name  : Google Plus Keyword Search
 </code>
