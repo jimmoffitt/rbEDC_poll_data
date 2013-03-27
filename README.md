@@ -59,10 +59,11 @@ Here are some important points:
 
 
 	+ Example "streams" configuration section:
+<code>
 	streams:	
-<p>
+
 	  - ID 	  : 1
 	    Name  : Facebook Keyword Search  
 	  - ID    : 3
     	    Name  : Google Plus Keyword Search
-</p>
+</code>
