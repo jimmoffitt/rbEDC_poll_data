@@ -10,7 +10,7 @@ Once the script is started, it enters an endless "while true" loop, retrieving d
 * Important note: this script is designed to process normalized Activity Streams (atom) data in XML.  As currently written it could easily be extended to retrieve data as flat-files in the Publisher's original format.  Stream configurations could be extended to include the appropriate Publisher original format (xml or json), then the "get data" end-point adjusted accordingly (../activities.json or ../activities.xml).  If writing data to a database, this extension to original format may get a bit more complicated.  The complication comes from mapping the original activity's elements to common database fields.
  
 
-This script exercises the "since_date" parameter of the EDC Activities API.  When the script runs, it uses this parameter to only retrieve data since the last poll to the EDC datastore.  So it will only retrieve "fresh" data and not fetch data already retrieved in previous intervals.  Note that there is currently *no persistence of the "since_data" parameter between separate runs of the script.*  This means that the maximum number of activities will be retrieved with the script's first request (as subject to the Publisher's public API restrictions).  After that first request, the "since_date" parameter will be managed to only retrieve fresh data. 
+This script exercises the "since_date" parameter of the EDC Activities API.  When the script runs, it uses this parameter to only retrieve data since the last poll to the EDC datastore.  So it will only retrieve "fresh" data and not fetch data already retrieved in previous intervals.  Note that there is currently **no persistence of the "since_data" parameter between separate runs of the script.**  This means that the maximum number of activities will be retrieved with the script's first request (as subject to the Publisher's public API restrictions).  After that first request, the "since_date" parameter will be managed to only retrieve fresh data. 
 
 
 Usage
@@ -38,9 +38,11 @@ See the sample EDC_config.yaml file for an example of a EDC client configuration
 
 Here are some important points:
 
+<p>
 + In the "account" section, you specify the "machine name" used in the URL for your EDC.  EDCs have the following URL pattern:
     https://machine_name.gnip.com
 
+<p>
 + In the "edc" section, you can specify the following processing options:
 	+ poll_interval: interval in seconds between EDC polls for new data.  Default is every 60 seconds.
 	+ poll_max: The maximum number of activities to return from each request.
@@ -49,16 +51,15 @@ Here are some important points:
 		markup format (xml or json, although only xml is currently supported). 
 	+ out_box: If storing data in files, where do you want them written to?
 
-
+<p>
 + In the "streams" section you have the option to explicitly list the EDC streams you want to collect data from. For each stream 
 	you need to specify its "ID" and provide a stream name:
 	
-	
-	+ ID: the numeric ID assigned to the stream.  This ID can be referenced by navigating to the data stream with the EDC dashboard and noting the numeric ID in the URL, as in "https://myEDC.gnip.com/data_collectors/5.  Note that these stream IDs are not always consecutive, and there will be gaps in the ID sequence of you have deleted any streams during the life of your EDC. 
+	+ ID: the numeric ID assigned to the stream.  This ID can be referenced by navigating to the data stream with the EDC dashboard and noting the numeric ID in the URL, as in "https://myEDC.gnip.com/data_collectors/5.  Note that these stream IDs are not always consecutive, and there will be gaps in the ID sequence if you have deleted any streams during the life of your EDC. 
 		
 	+ Name: a label given to the stream to help you identify the stream in the configuration file.  This name is echoed in standard output as the script runs.
 
-
+<p>
 * Example "streams" configuration section:
 
 <code>
