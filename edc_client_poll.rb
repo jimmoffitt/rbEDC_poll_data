@@ -2,9 +2,6 @@
 '''
 A simple script to retrieve data from a Enterprise Data Collector (EDC).
 
-
-
-
 This script can "self-discover" the current set of active EDC streams, or they can be statically
 configured in the EDC configuration file.
 
@@ -16,11 +13,12 @@ TODO:
     [] Keep password configuration?
 
 '''
-require "base64"
-require "yaml"
-require "nokogiri"
-require "cgi"
-#require "nori"  #I tried to use this gem to transform XML to a Hash, but the IDE kept blowing up!
+require "base64"    #Used for basic password encryption.
+require "yaml"      #Used for configuration file management.
+require "nokogiri"  #Used for parsing activity XML.
+require "cgi"       #Used only for retrieving HTTP GET parameters and converting to a hash.
+#require "nori"     #I tried to use this gem to transform XML to a Hash, but the IDE kept blowing up!
+
 
 class EDC_Client
 
@@ -74,7 +72,7 @@ class EDC_Client
         #Load any configured streams.
         streams = config["streams"]
 
-        if not streams.nil? then
+        if not streams.nil? then  #Load from configuration file.
             streams.each do |stream|
                 #p stream
                 @streams << stream
@@ -84,12 +82,22 @@ class EDC_Client
                 stream["refresh_url"] = ""
             end
 
-        else
+        else #Nothing in configuration file?  Then go discover what is there.
             @streams = discoverDataCollectors
         end
     end
 
 
+    '''
+    Tours potential end-points and determines whether they are found or not.
+    This method is called if there are no streams defined in the configuration file.
+    If there are ANY streams defined, this method is not called.
+    This method currently hits the "api_help" end-point to determine whether a stream exists or not.
+    Uses the STREAM_SEARCH_LIMIT constant to limit how "high" it looks with stream IDs.
+    For streams that are found, it populates a stream array with:
+        ID: the numeric ID assigned to the stream.
+        Name: based on the HTML "title", with punctuation characters dropped.
+    '''
     def discoverDataCollectors
 
         print "Pinging end-points, looking for active streams..."
@@ -137,7 +145,11 @@ class EDC_Client
         @streams
     end
 
-
+    '''
+    Parses normalized Activity Stream XML.
+    Parsing details here are driven by the current database schema used to store activities.
+    If writing files, then just write out the entire activity payload to the file.
+    '''
     def processResponseXML(docXML)
 
         #Grab Publisher and End Point from response
@@ -155,9 +167,18 @@ class EDC_Client
         docXML.root.children.each do |node|
             if node.name == 'entry' then
                 activities += 1
-
                 if (activities % 50) == 0 then puts "." else print "." end
 
+            end
+
+            #Storing as a file?  Then we are writing the entire activity payload with no need to parse out details.
+            if @storage == "files" then #Write to the file.
+                #Create file name
+                filename = id + ".xml"
+                File.open(@out_box + "/" + filename, "w") do |new_file|
+                    new_file.write(content)
+                end
+            else #Storing in database, so do more parsing for payload elements that have been promoted to db fields.
                 node.children.each do |sub_node|
                     id = sub_node.inner_text if sub_node.name == "id"
                     posted_time = sub_node.inner_text if sub_node.name == "created"
@@ -182,27 +203,23 @@ class EDC_Client
                     end
                 end
             end
-
-            if @storage == "files" then #Write to the file.
-                #Create file name
-                filename = id + ".xml"
-                File.open(@out_box + "/" + filename, "w") do |new_file|
-                    new_file.write(content)
-                end
-            else #Storing in database.
-
-            end
         end
 
         p "Retrieved #{activities} activities..."
     end
 
-    #TODO: need to manage timestamps for requests
+    '''
+    The driver of the process, complete with a "while true" loop!
+    Loops for each stream, builds the Activities API URL.
+    Applies the @poll_max attribute and manages the "since_date" as GET parameters.
+
+
+
 
     #max: The maximum number of activities to return capped at 10000 (default: 100).
     #since_date: Only return activities since the given date, in UTC, in the format "YYYYmmddHHMMSS".
     #to_date: return only activities before the given date, in UTC, in the format "YYYYmmddHHMMSS".
-
+    '''
     def retrieveData
 
         while true do
@@ -211,33 +228,33 @@ class EDC_Client
                 url = ""
 
                 #Build URL for retrieving data.
-                if stream["refresh_url"] == "" then
+                if stream["refresh_url"] == "" then  #We just started script, first request.
                     url = "https://#{@machine_name}.gnip.com/data_collectors/#{stream["ID"]}/activities.xml"
-                else
+                else #Not the first request, so make use of the "refreshURL" information returned from the Activitites API.
                     url = stream["refresh_url"]
                 end
 
                 #Set up request parameters.
                 params = Hash.new
 
-                #Add since_time parameter if it is available.
+                #Add since_date parameter if it is available.
                 if url.include?("since_date") then #then we need to parse off the timestamp, and add explicitly to the params.
                     params["since_date"] = CGI.parse(URI.parse(url).query)["since_date"].first #and only!
                 end
 
-                #Add maximum
+                #Add maximum amount of data configuration setting.
                 if @poll_max > 0 then
                     params["max"] = @poll_max
                 end
 
-                p "URL = " + url
-
                 @http.url = url
 
-                response = @http.GET(params)
+                response = @http.GET(params) #Ask for data!
 
+                #Load the response into an XML document.
                 docXML = Nokogiri::XML.parse(response.body)  {|config| config.noblanks}
 
+                #Grab the "refreshURL" from the Activities API response, which is used in subsequent requests.
                 begin
                     stream["refresh_url"] = (docXML.xpath("//results").attr("refreshURL")).to_s
                 rescue
@@ -247,16 +264,13 @@ class EDC_Client
                 p "Processing data from #{stream["Name"]}..."
                 processResponseXML(docXML)
             end
+
+            #Sleep before asking for more fresh data.
             p "Sleeping for #{@poll_interval} seconds..."
             sleep(@poll_interval)
         end
     end
 end
-
-
-
-
-
 
 #=======================================================================================================================
 #A simple RESTful HTTP class for interacting with the EDC end-point.
@@ -335,6 +349,9 @@ class PtREST
 
     def GET(params=nil)
         uri = URI(@url)
+
+        #params are passed in as a hash.
+        #Example: params["max"] = 100, params["since_date"] = 20130321000000
 
         if not params.nil?
             uri.query = URI.encode_www_form(params)
