@@ -1,15 +1,16 @@
 Introduction
 ============
 
-This is a Ruby script written to retrieve data from a Enterprise Data Collector (EDC).  It illustrates the ability to poll a EDC instance with HTTP GET requests.  This script can navigate EDC data streams and retrieve what data has been collected as individual activity files.  (Soon it will also be able to write those activities to a database.)
+This is a Ruby script written to retrieve data from a Enterprise Data Collector (EDC).  It illustrates the ability to poll a EDC instance with HTTP GET requests.  This script can navigate EDC data streams and using the Activities API retrieve what data has been collected as individual activity files.  (Soon it will also be able to write those activities to a database.)
 
 EDC data streams can be configured in a script configuration file.  Otherwise, there is a script method that can "discover" what streams are hosted on your EDC.  If you do not configure streams explicitly in your configuration file, the "discovery" method will be automatically triggered.  If you do not specify data streams in the configuration file, this discovery process gets triggered every time the script is launched.  
 
 Once the script is started, it enters an endless "while true" loop, retrieving data on a user-specified interval (with a default of 60 seconds).   
 
-* Important note: this script is designed to process normalized Activity Streams (atom) data.  
+* Important note: this script is designed to process normalized Activity Streams (atom) data in XML.  As currently written it could easily be extended to retrieve data as flat-files in the Publisher's original format.  Stream configurations could be extended to include the appropriate Publisher original format (xml or json), then the "get data" end-point adjusted accordingly (../activities.json or ../activities.xml).  If writing data to a database, this extension to original format may get a bit more complicated.  The complication comes from mapping the original activity's elements to common database fields.
  
-{mention refreshURL/since_date mechanism}
+
+This script exercises the "since_date" parameter of the EDC Activities API.  When the script runs, it uses this parameter to only retrieve data since the last poll to the EDC datastore.  So it will only retrieve "fresh" data and not fetch data already retrieved in previous intervals.  Note that there is currently *no persistence of the "since_data" parameter between separate runs of the script.*  This means that the maximum number of activities will be retrieved with the script's first request (as subject to the Publisher's public API restrictions).  After that first request, the "since_date" parameter will be managed to only retrieve fresh data. 
 
 
 Usage
