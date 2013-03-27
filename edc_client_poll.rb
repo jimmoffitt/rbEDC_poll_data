@@ -49,6 +49,11 @@ class EDC_Client
         end
     end
 
+    def getPassword
+        #You may want to implement a more secure password handler.  Or not.
+        @password = Base64.decode64(@password_encoded)  #Decrypt password.
+    end
+
     def getCollectorConfig(config_file)
 
         config = YAML.load_file(config_file)
@@ -57,6 +62,11 @@ class EDC_Client
         @machine_name = config["account"]["machine_name"]
         @user_name  = config["account"]["user_name"]
         @password_encoded = config["account"]["password_encoded"]
+
+        if @password_encoded.nil? then  #User is passing in plain-text password...
+            @password = config["account"]["password"]
+            @password_encoded = Base64.encode64(@password)
+        end
 
         #EDC configuration details.
         @storage = config["edc"]["storage"]
@@ -352,7 +362,6 @@ class PtREST
 
         #params are passed in as a hash.
         #Example: params["max"] = 100, params["since_date"] = 20130321000000
-
         if not params.nil?
             uri.query = URI.encode_www_form(params)
         end
