@@ -47,15 +47,17 @@ Here are some important points:
 		markup format (xml or json, although only xml is currently supported). 
 	+ out_box: If storing data in files, where do you want them written to?
 
+
 + In the "streams" section you have the option to explicitly list the EDC streams you want to collect data from. For each stream 
 	you need to specify its "ID" and provide a stream name:
 	
 	
-	ID: the numeric ID assigned to the stream.  This ID can be referenced by navigating to the data stream with the EDC dashboard and noting the numeric ID in the URL, as in "https://myEDC.gnip.com/data_collectors/5.  Note that these stream IDs are not always consecutive, and there will be gaps in the ID sequence of you have deleted any streams during the life of your EDC. 
+	+ ID: the numeric ID assigned to the stream.  This ID can be referenced by navigating to the data stream with the EDC dashboard and noting the numeric ID in the URL, as in "https://myEDC.gnip.com/data_collectors/5.  Note that these stream IDs are not always consecutive, and there will be gaps in the ID sequence of you have deleted any streams during the life of your EDC. 
 		
-	Name: a label given to the stream to help you identify the stream in the configuration file.  This name is echoed in standard output as the script runs.
+	+ Name: a label given to the stream to help you identify the stream in the configuration file.  This name is echoed in standard output as the script runs.
 
 
+	+ Example "streams" configuration section:
 	streams:	
 	  - ID 	  : 1
 	    Name  : Facebook Keyword Search  
