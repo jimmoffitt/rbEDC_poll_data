@@ -40,11 +40,25 @@ Here are some important points:
 	https://machine_name.gnip.com
 
 + In the "edc" section, you can specify the following processing options:
-	+ poll_interval: the interval in seconds to poll the EDC for new data.
-	+ poll_max:
-	+ storage:
-	+ out_box:
+	+ poll_interval: interval in seconds between EDC polls for new data.  Default is every 60 seconds.
+	+ poll_max: The maximum number of activities to return from each request.
+	+ storage: "files" or "database".  How do you plan on storing the data? In flat files or in a database.
+		If you are storing as files, the filename is based on the native activity "id" and the extension indicates the 
+		markup format (xml or json, although only xml is currently supported). 
+	+ out_box: If storing data in files, where do you want them written to?
 
-+ In the "streams" section you have the option to explicitly list the EDC streams you want to collect data from.
++ In the "streams" section you have the option to explicitly list the EDC streams you want to collect data from. For each stream 
+	you need to specify its "ID" and provide a stream name:
+	
+	
+	ID: the numeric ID assigned to the stream.  This ID can be referenced by navigating to the data stream with the EDC dashboard and noting the numeric ID in the URL, as in "https://myEDC.gnip.com/data_collectors/5.  Note that these stream IDs are not always consecutive, and there will be gaps in the ID sequence of you have deleted any streams during the life of your EDC. 
+		
+	Name: a label given to the stream to help you identify the stream in the configuration file.  This name is echoed in standard output as the script runs.
 
+
+	streams:	
+	  - ID 	  : 1
+	    Name  : Facebook Keyword Search  
+	  - ID    : 3
+    	    Name  : Google Plus Keyword Search
 
