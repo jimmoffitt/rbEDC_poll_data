@@ -47,7 +47,23 @@ class EDC_Client
         if not config_file.nil? then
             getStreamConfig(config_file)
         end
-    end
+
+        if @storage == "database" then #Get database connection details...
+            db_host = config["database"]["host"]
+            db_port = config["database"]["port"]
+            db_schema = config["database"]["schema"]
+            db_user_name = config["database"]["user_name"]
+            db_password  = config["database"]["password"]
+            #... and create a database object...
+            @datastore = PtDatabase.new(db_host, db_port, db_schema, db_user_name, db_password)
+
+            begin
+                @datastore.connect
+            rescue
+                #No database connection, put your error handling here...
+                p "Could not connect to database @ #{db_host}!"
+            end
+        end
 
     def getPassword
         #You may want to implement a more secure password handler.  Or not.
@@ -74,17 +90,7 @@ class EDC_Client
         @poll_interval = config["edc"]["poll_interval"]
         @poll_max = config["edc"]["poll_max"]
 
-        if @storage == "database" then #Get database connection details.
-            db_host = config["database"]["host"]
-            db_port = config["database"]["port"]
-            db_schema = config["database"]["schema"]
-            db_user_name = config["database"]["user_name"]
-            db_password  = config["database"]["password"]
-
-            @datastore = PtDatabase.new(db_host, db_port, db_schema, db_user_name, db_password)
-            @datastore.connect
-        end
-    end
+      end
 
     def getStreamConfig(config_file)
 
@@ -231,7 +237,7 @@ class EDC_Client
                         end
                     end
 
-                    @datastore.storeEDCActivity(id, posted_time, content, body, publisher, value, tags)
+                    @datastore.storeActivityData(id, posted_time, content, body, publisher, value, tags)
                 end
             end
         end
@@ -320,7 +326,7 @@ It is just a great way to create databases.
 ActiveRecord::Schema.define(:version => 20130306234839) do
 
   create_table "activities", :force => true do |t|
-      t.integer  "native_id",   :limit => 8
+      t.string   "native_id"
       t.text     "content"
       t.text     "body"
       t.string   "rule_value"
@@ -328,8 +334,6 @@ ActiveRecord::Schema.define(:version => 20130306234839) do
       t.string   "publisher"
       t.datetime "created_at",               :null => false
       t.datetime "updated_at",               :null => false
-      t.float    "latitude"
-      t.float    "longitude"
       t.datetime "posted_time"
   end
 
@@ -403,7 +407,7 @@ class PtDatabase
 
 
     def to_s
-        "PowerTrack object => " + @host + ":" + @port.to_s + "@" + @user_name + " schema:" + @database
+        "EDC object => " + @host + ":" + @port.to_s + "@" + @user_name + " schema:" + @database
     end
 
     def connect
@@ -442,61 +446,13 @@ class PtDatabase
     #NativeID is defined as an integer.  This works for Twitter, but not for other publishers who use alphanumerics.
     #Tweet "id" field has this form: "tag:search.twitter.com,2005:198308769506136064"
     #This function parses out the numeric ID at end.
-    def getNativeID(id)
+    def getTwitterNativeID(id)
         native_id = Integer(id.split(":")[-1])
     end
 
     #Twitter uses UTC.
     def getPostedTime(time_stamp)
         time_stamp = Time.parse(time_stamp).strftime("%Y-%m-%d %H:%M:%S")
-    end
-
-    #With Rehydration, there are no rules, just requested IDs.
-    def getMatchingRules(matching_rules)
-        return "rehydration", "rehydration"
-    end
-
-    '''
-    Parse the activity payload and get the lat/long coordinates.
-    ORDER MATTERS: Latitude, Longitude.
-
-    #An example here we have POINT coordinates.
-    "location":{
-        "objectType":"place",
-        "displayName":"Jefferson Southwest, KY",
-        "name":"Jefferson Southwest",
-        "country_code":"United States",
-        "twitter_country_code":"US",
-        "link":"http://api.twitter.com/1/geo/id/7a46e5213d3a1af2.json",
-        "geo":{
-            "type":"Polygon",
-            "coordinates":[[[-85.951854,37.997244],[-85.700857,37.997244],[-85.700857,38.233633],[-85.951854,38.233633]]]}
-    },
-    "geo":{"type":"Point","coordinates":[38.1341,-85.8953]},
-    '''
-
-    def getGeoCoordinates(activity)
-
-        geo = activity["geo"]
-        latitude = 0
-        longitude = 0
-
-        if not geo.nil? then #We have a "root" geo entry, so go there to get Point location.
-            if geo["type"] == "Point" then
-                latitude = geo["coordinates"][0]
-                longitude = geo["coordinates"][1]
-
-                #We are done here, so return
-                return latitude, longitude
-
-            end
-        end
-
-        #p activity["location"]
-        #p activity["location"]["geo"]
-        #p activity["geo"]
-
-        return latitude, longitude
     end
 
     #Replace some special characters with an _.
@@ -513,81 +469,39 @@ class PtDatabase
         text
     end
 
-
-    def storeEDCActivity(native_id, post_time, content, body, publisher, rule_values, rule_tags)
-
-        #Handle the things not passed in from a EDC, but stored in database.
-        uuid = ""
-        latitude = 0
-        longitude = 0
-
-        content = handleSpecialCharacters(content)
-        body = handleSpecialCharacters(body)
-
-
-        #TODO: native_is needs to be
-
-        #Build SQL.
-        sql = "REPLACE INTO activities (native_id, posted_time, content, body, rule_value, rule_tag, publisher, latitude, longitude, created_at, updated_at ) " +
-            "VALUES ('#{native_id}', '#{post_time}', '#{content}', '#{body}', '#{rule_values}','#{rule_tags}','#{publisher}', #{latitude}, #{longitude}, UTC_TIMESTAMP(), UTC_TIMESTAMP());"
-
-        if not REPLACE(sql) then
-            p "Activity not written to database: " + publisher + " | " + native_id
-        end
-    end
-
-
     '''
     storeActivity
     Receives an Activity Stream data point formatted in JSON.
     Does some (hopefully) quick parsing of payload.
     Writes to an Activities table.
 
-    t.integer  "native_id",   :limit => 8
+    t.string   "native_id"
     t.text     "content"
     t.text     "body"
     t.string   "rule_value"
     t.string   "rule_tag"
     t.string   "publisher"
     t.string   "job_uuid"  #Used for Historical PowerTrack.
-    t.float    "latitude"
-    t.float    "longitude"
     t.datetime "posted_time"
     '''
 
-    def storeActivity(activity, uuid = nil)
 
-        data = JSON.parse(activity)
+    def storeActivityData(native_id, posted_at, content, body, publisher, rule_values, rule_tags)
 
-        #Handle uuid if there is not one (tweet not returned by Historical API)
-        if uuid == nil then
-            uuid = ""
-        end
+        content = handleSpecialCharacters(content)
+        body = handleSpecialCharacters(body)
 
-        #Parse from the activity the "atomic" elements we are inserting into db fields.
-
-        post_time = getPostedTime(data["postedTime"])
-
-        native_id = getNativeID(data["id"])
-
-        body = handleSpecialCharacters(data["body"])
-
-        content = handleSpecialCharacters(activity)
-
-        #Parse gnip:matching_rules and extract one or more rule values/tags
-        rule_values, rule_tags  = "rehydration", "rehydration" #getMatchingRules(data["gnip"]["matching_rules"])
-
-        #Parse the activity and extract any geo available data.
-        latitude, longitude = getGeoCoordinates(data)
+        #TODO: native_id needs to be a string...
 
         #Build SQL.
-        sql = "REPLACE INTO activities (native_id, posted_time, content, body, rule_value, rule_tag, publisher, job_uuid, latitude, longitude, created_at, updated_at ) " +
-            "VALUES (#{native_id}, '#{post_time}', '#{content}', '#{body}', '#{rule_values}','#{rule_tags}','Twitter', '#{uuid}', #{latitude}, #{longitude}, UTC_TIMESTAMP(), UTC_TIMESTAMP());"
+        sql = "REPLACE INTO activities (native_id, posted_at, content, body, rule_value, rule_tag, publisher, created_at, updated_at ) " +
+            "VALUES ('#{native_id}', '#{posted_at}', '#{content}', '#{body}', '#{rule_values}','#{rule_tags}','#{publisher}', #{latitude}, #{longitude}, UTC_TIMESTAMP(), UTC_TIMESTAMP());"
 
         if not REPLACE(sql) then
-            p "Activity not written to database: " + activity.to_s
+            p "Activity not written to database: " + publisher + " | " + native_id
         end
     end
+
 end #PtDB class.
 
 
@@ -713,10 +627,10 @@ if __FILE__ == $0  #This script code is executed when running this file.
     end
 
     p "Creating EDC Client object with config file: " + $config
-    edc = EDC_Client.new($config)
 
-    #Need to set up a HTTP details.
-    p edc.retrieveData
+    edc = EDC_Client.new($config)
+    edc.retrieveData  #The do-all and loop forever method...
+
     p "Exiting"
 
 end
