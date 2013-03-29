@@ -22,7 +22,7 @@ require "cgi"       #Used only for retrieving HTTP GET parameters and converting
 
 class EDC_Client
 
-    attr_accessor :http, :machine_name, :user_name, :password_encoded, :url,
+    attr_accessor :http, :datastore, :machine_name, :user_name, :password_encoded, :url,
                   :streams, :storage, :out_box, :poll_interval, :poll_max
 
     STREAM_SEARCH_LIMIT = 20  #Used to limit how high we go searching for active streams.
@@ -73,6 +73,17 @@ class EDC_Client
         @out_box = config["edc"]["out_box"]
         @poll_interval = config["edc"]["poll_interval"]
         @poll_max = config["edc"]["poll_max"]
+
+        if @storage == "database" then #Get database connection details.
+            db_host = config["database"]["host"]
+            db_port = config["database"]["port"]
+            db_schema = config["database"]["schema"]
+            db_user_name = config["database"]["user_name"]
+            db_password  = config["database"]["password"]
+
+            @datastore = PtDatabase.new(db_host, db_port, db_schema, db_user_name, db_password)
+            @datastore.connect
+        end
     end
 
     def getStreamConfig(config_file)
@@ -166,11 +177,11 @@ class EDC_Client
         publisher = docXML.xpath("//results").attr("publisher")
         end_point = docXML.xpath("//results").attr("endpoint")
 
-        content = docXML.to_s #entire XML payload
+        content = ""
         id = ""
         posted_time = ""
         body = ""
-        tag = Array.new
+        tags = Array.new
         value = Array.new
         activities = 0
 
@@ -179,38 +190,48 @@ class EDC_Client
                 activities += 1
                 if (activities % 50) == 0 then puts "." else print "." end
 
-            end
+                #Grab this activity content
+                content = node.to_s
 
-            #Storing as a file?  Then we are writing the entire activity payload with no need to parse out details.
-            if @storage == "files" then #Write to the file.
-                #Create file name
-                filename = id + ".xml"
-                File.open(@out_box + "/" + filename, "w") do |new_file|
-                    new_file.write(content)
-                end
-            else #Storing in database, so do more parsing for payload elements that have been promoted to db fields.
-                node.children.each do |sub_node|
-                    id = sub_node.inner_text if sub_node.name == "id"
-                    posted_time = sub_node.inner_text if sub_node.name == "created"
+                #Storing as a file?  Then we are writing the entire activity payload with no need to parse out details.
+                if @storage == "files" then #Write to the file.
+
+                    node.children.each do |sub_node|
+                        #TODO: make this short-circuit after finding "id" tag...
+                        id = sub_node.inner_text if sub_node.name == "id"
+                    end
+
+                    #Create file name
+                    filename = id + ".xml"
+                    File.open(@out_box + "/" + filename, "w") do |new_file|
+                        new_file.write(content)
+                    end
+                else #Storing in database, so do more parsing for payload elements that have been promoted to db fields.
+                    node.children.each do |sub_node|
+                        id = sub_node.inner_text if sub_node.name == "id"
+                        posted_time = sub_node.inner_text if sub_node.name == "created"
 
 
-                    if sub_node.name == "object" then
-                        sub_node.children.each do |content_node|
-                            body = content_node.inner_text if content_node.name == "content"
+                        if sub_node.name == "object" then
+                            sub_node.children.each do |content_node|
+                                body = content_node.inner_text if content_node.name == "content"
+                            end
+                        end
+
+                        if sub_node.name == "matching_rules" then
+                            tag = Array.new
+                            value = Array.new
+                            sub_node.children.each do |rules_node|
+                                #p rules_node.name
+
+                                value << rules_node.inner_text if rules_node.name == "matching_rule"
+                                tags = docXML.xpath("//*[tag]")
+                                #p tags
+                            end
                         end
                     end
 
-                    if sub_node.name == "matching_rules" then
-                        tag = Array.new
-                        value = Array.new
-                        sub_node.children.each do |rules_node|
-                            #p rules_node.name
-
-                            value << rules_node.inner_text if rules_node.name == "matching_rule"
-                            tags = docXML.xpath("//*[tag]")
-                            #p tags
-                        end
-                    end
+                    @datastore.storeEDCActivity(id, posted_time, content, body, publisher, value, tags)
                 end
             end
         end
@@ -223,12 +244,10 @@ class EDC_Client
     Loops for each stream, builds the Activities API URL.
     Applies the @poll_max attribute and manages the "since_date" as GET parameters.
 
-
-
-
+    Activities API parameters:
     #max: The maximum number of activities to return capped at 10000 (default: 100).
     #since_date: Only return activities since the given date, in UTC, in the format "YYYYmmddHHMMSS".
-    #to_date: return only activities before the given date, in UTC, in the format "YYYYmmddHHMMSS".
+    #to_date: return only activities before the given date, in UTC, in the format "YYYYmmddHHMMSS". (not used)
     '''
     def retrieveData
 
@@ -282,115 +301,6 @@ class EDC_Client
     end
 end
 
-#=======================================================================================================================
-#A simple RESTful HTTP class for interacting with the EDC end-point.
-#Future versions will most likely use an external PtREST object, common to all PowerTrack ruby clients.
-class PtREST
-    require "net/https"     #HTTP gem.
-    require "uri"
-
-    attr_accessor :url, :uri, :user_name, :password_encoded, :headers, :data, :data_agent, :account_name, :publisher
-
-    def initialize(url=nil, user_name=nil, password_encoded=nil, headers=nil)
-        if not url.nil?
-            @url = url
-        end
-
-        if not user_name.nil?
-            @user_name = user_name
-        end
-
-        if not password_encoded.nil?
-            @password_encoded = password_encoded
-            @password = Base64.decode64(@password_encoded)
-        end
-
-        if not headers.nil?
-            @headers = headers
-        end
-    end
-
-    def url=(value)
-        @url = value
-        if not @url.nil?
-            @uri = URI.parse(@url)
-        end
-    end
-
-    def password_encoded=(value)
-        @password_encoded=value
-        if not @password_encoded.nil? then
-            @password = Base64.decode64(@password_encoded)
-        end
-    end
-
-    #Fundamental REST API methods:
-    def POST(data=nil)
-
-        if not data.nil? #if request data passed in, use it.
-            @data = data
-        end
-
-        uri = URI(@url)
-        http = Net::HTTP.new(uri.host, uri.port)
-        http.use_ssl = true
-        request = Net::HTTP::Post.new(uri.path)
-        request.body = @data
-        request.basic_auth(@user_name, @password)
-        response = http.request(request)
-        return response
-    end
-
-    def PUT(data=nil)
-
-        if not data.nil? #if request data passed in, use it.
-            @data = data
-        end
-
-        uri = URI(@url)
-        http = Net::HTTP.new(uri.host, uri.port)
-        http.use_ssl = true
-        request = Net::HTTP::Put.new(uri.path)
-        request.body = @data
-        request.basic_auth(@user_name, @password)
-        response = http.request(request)
-        return response
-    end
-
-    def GET(params=nil)
-        uri = URI(@url)
-
-        #params are passed in as a hash.
-        #Example: params["max"] = 100, params["since_date"] = 20130321000000
-        if not params.nil?
-            uri.query = URI.encode_www_form(params)
-        end
-
-        http = Net::HTTP.new(uri.host, uri.port)
-        http.use_ssl = true
-        request = Net::HTTP::Get.new(uri.request_uri)
-        request.basic_auth(@user_name, @password)
-
-        response = http.request(request)
-        return response
-    end
-
-    def DELETE(data=nil)
-        if not data.nil?
-            @data = data
-        end
-
-        uri = URI(@url)
-        http = Net::HTTP.new(uri.host, uri.port)
-        http.use_ssl = true
-        request = Net::HTTP::Delete.new(uri.path)
-        request.body = @data
-        request.basic_auth(@user_name, @password)
-        response = http.request(request)
-        return response
-    end
-end #PtREST class.
-
 
 
 #=======================================================================================================================
@@ -416,7 +326,6 @@ ActiveRecord::Schema.define(:version => 20130306234839) do
       t.string   "rule_value"
       t.string   "rule_tag"
       t.string   "publisher"
-      t.string   "job_uuid"
       t.datetime "created_at",               :null => false
       t.datetime "updated_at",               :null => false
       t.float    "latitude"
@@ -605,6 +514,29 @@ class PtDatabase
     end
 
 
+    def storeEDCActivity(native_id, post_time, content, body, publisher, rule_values, rule_tags)
+
+        #Handle the things not passed in from a EDC, but stored in database.
+        uuid = ""
+        latitude = 0
+        longitude = 0
+
+        content = handleSpecialCharacters(content)
+        body = handleSpecialCharacters(body)
+
+
+        #TODO: native_is needs to be
+
+        #Build SQL.
+        sql = "REPLACE INTO activities (native_id, posted_time, content, body, rule_value, rule_tag, publisher, latitude, longitude, created_at, updated_at ) " +
+            "VALUES ('#{native_id}', '#{post_time}', '#{content}', '#{body}', '#{rule_values}','#{rule_tags}','#{publisher}', #{latitude}, #{longitude}, UTC_TIMESTAMP(), UTC_TIMESTAMP());"
+
+        if not REPLACE(sql) then
+            p "Activity not written to database: " + publisher + " | " + native_id
+        end
+    end
+
+
     '''
     storeActivity
     Receives an Activity Stream data point formatted in JSON.
@@ -659,8 +591,114 @@ class PtDatabase
 end #PtDB class.
 
 
+#=======================================================================================================================
+#A simple RESTful HTTP class for interacting with the EDC end-point.
+#Future versions will most likely use an external PtREST object, common to all PowerTrack ruby clients.
+class PtREST
+    require "net/https"     #HTTP gem.
+    require "uri"
 
+    attr_accessor :url, :uri, :user_name, :password_encoded, :headers, :data, :data_agent, :account_name, :publisher
 
+    def initialize(url=nil, user_name=nil, password_encoded=nil, headers=nil)
+        if not url.nil?
+            @url = url
+        end
+
+        if not user_name.nil?
+            @user_name = user_name
+        end
+
+        if not password_encoded.nil?
+            @password_encoded = password_encoded
+            @password = Base64.decode64(@password_encoded)
+        end
+
+        if not headers.nil?
+            @headers = headers
+        end
+    end
+
+    def url=(value)
+        @url = value
+        if not @url.nil?
+            @uri = URI.parse(@url)
+        end
+    end
+
+    def password_encoded=(value)
+        @password_encoded=value
+        if not @password_encoded.nil? then
+            @password = Base64.decode64(@password_encoded)
+        end
+    end
+
+    #Fundamental REST API methods:
+    def POST(data=nil)
+
+        if not data.nil? #if request data passed in, use it.
+            @data = data
+        end
+
+        uri = URI(@url)
+        http = Net::HTTP.new(uri.host, uri.port)
+        http.use_ssl = true
+        request = Net::HTTP::Post.new(uri.path)
+        request.body = @data
+        request.basic_auth(@user_name, @password)
+        response = http.request(request)
+        return response
+    end
+
+    def PUT(data=nil)
+
+        if not data.nil? #if request data passed in, use it.
+            @data = data
+        end
+
+        uri = URI(@url)
+        http = Net::HTTP.new(uri.host, uri.port)
+        http.use_ssl = true
+        request = Net::HTTP::Put.new(uri.path)
+        request.body = @data
+        request.basic_auth(@user_name, @password)
+        response = http.request(request)
+        return response
+    end
+
+    def GET(params=nil)
+        uri = URI(@url)
+
+        #params are passed in as a hash.
+        #Example: params["max"] = 100, params["since_date"] = 20130321000000
+        if not params.nil?
+            uri.query = URI.encode_www_form(params)
+        end
+
+        http = Net::HTTP.new(uri.host, uri.port)
+        http.use_ssl = true
+        request = Net::HTTP::Get.new(uri.request_uri)
+        request.basic_auth(@user_name, @password)
+
+        response = http.request(request)
+        return response
+    end
+
+    def DELETE(data=nil)
+        if not data.nil?
+            @data = data
+        end
+
+        uri = URI(@url)
+        http = Net::HTTP.new(uri.host, uri.port)
+        http.use_ssl = true
+        request = Net::HTTP::Delete.new(uri.path)
+        request.body = @data
+        request.basic_auth(@user_name, @password)
+        response = http.request(request)
+        return response
+    end
+end #PtREST class.
 
 #=======================================================================================================================
 if __FILE__ == $0  #This script code is executed when running this file.
