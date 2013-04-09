@@ -218,7 +218,6 @@ class EDC_Client
                         id = sub_node.inner_text if sub_node.name == "id"
                         posted_time = sub_node.inner_text if sub_node.name == "created"
 
-
                         if sub_node.name == "object" then
                             sub_node.children.each do |content_node|
                                 body = content_node.inner_text if content_node.name == "content"
