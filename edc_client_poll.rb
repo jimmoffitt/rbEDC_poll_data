@@ -48,22 +48,7 @@ class EDC_Client
             getStreamConfig(config_file)
         end
 
-        if @storage == "database" then #Get database connection details...
-            db_host = config["database"]["host"]
-            db_port = config["database"]["port"]
-            db_schema = config["database"]["schema"]
-            db_user_name = config["database"]["user_name"]
-            db_password  = config["database"]["password"]
-            #... and create a database object...
-            @datastore = PtDatabase.new(db_host, db_port, db_schema, db_user_name, db_password)
-
-            begin
-                @datastore.connect
-            rescue
-                #No database connection, put your error handling here...
-                p "Could not connect to database @ #{db_host}!"
-            end
-        end
+    end
 
     def getPassword
         #You may want to implement a more secure password handler.  Or not.
@@ -90,7 +75,23 @@ class EDC_Client
         @poll_interval = config["edc"]["poll_interval"]
         @poll_max = config["edc"]["poll_max"]
 
-      end
+        if @storage == "database" then #Get database connection details...
+            db_host = config["database"]["host"]
+            db_port = config["database"]["port"]
+            db_schema = config["database"]["schema"]
+            db_user_name = config["database"]["user_name"]
+            db_password  = config["database"]["password"]
+            #... and create a database object...
+            @datastore = PtDatabase.new(db_host, db_port, db_schema, db_user_name, db_password)
+
+            begin
+                @datastore.connect
+            rescue
+                #No database connection, put your error handling here...
+                p "Could not connect to database @ #{db_host}!"
+            end
+        end
+    end
 
     def getStreamConfig(config_file)
 
@@ -289,15 +290,19 @@ class EDC_Client
                 #Load the response into an XML document.
                 docXML = Nokogiri::XML.parse(response.body)  {|config| config.noblanks}
 
-                #Grab the "refreshURL" from the Activities API response, which is used in subsequent requests.
-                begin
-                    stream["refresh_url"] = (docXML.xpath("//results").attr("refreshURL")).to_s
-                rescue
-                   p "Error occurred parsing 'refreshURL'."
-                end
+                if docXML.to_s.include?("Could not find data collector with id") then
+                    p "Could not find Data Collector with ID = #{stream["ID"]}.  Please update stream configuration details. "
+                else
+                    #Grab the "refreshURL" from the Activities API response, which is used in subsequent requests.
+                    begin
+                        stream["refresh_url"] = (docXML.xpath("//results").attr("refreshURL")).to_s
+                    rescue
+                       p "Error occurred parsing 'refreshURL'."
+                    end
 
-                p "Processing data from #{stream["Name"]}..."
-                processResponseXML(docXML)
+                    p "Processing data from #{stream["Name"]}..."
+                    processResponseXML(docXML)
+                end
             end
 
             #Sleep before asking for more fresh data.
@@ -334,7 +339,7 @@ ActiveRecord::Schema.define(:version => 20130306234839) do
       t.string   "publisher"
       t.datetime "created_at",               :null => false
       t.datetime "updated_at",               :null => false
-      t.datetime "posted_time"
+      t.datetime "posted_at"
   end
 
 end
@@ -495,10 +500,12 @@ class PtDatabase
 
         #Build SQL.
         sql = "REPLACE INTO activities (native_id, posted_at, content, body, rule_value, rule_tag, publisher, created_at, updated_at ) " +
-            "VALUES ('#{native_id}', '#{posted_at}', '#{content}', '#{body}', '#{rule_values}','#{rule_tags}','#{publisher}', #{latitude}, #{longitude}, UTC_TIMESTAMP(), UTC_TIMESTAMP());"
+            "VALUES ('#{native_id}', '#{posted_at}', '#{content}', '#{body}', '#{rule_values}','#{rule_tags}','#{publisher}', UTC_TIMESTAMP(), UTC_TIMESTAMP());"
 
         if not REPLACE(sql) then
             p "Activity not written to database: " + publisher + " | " + native_id
+        else
+            p "Activity WRITTEN to database: " + publisher + " | " + native_id
         end
     end
 
