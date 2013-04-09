@@ -1,9 +1,9 @@
 Introduction
 ============
 
-This is a Ruby script written to retrieve data from a Enterprise Data Collector (EDC).  It illustrates the ability to poll a EDC instance with HTTP GET requests.  This script can navigate EDC data streams and using the Activities API retrieve what data has been collected as individual activity files.  (Soon it will also be able to write those activities to a database.)
+This is a Ruby script written to retrieve data from an Enterprise Data Collector (EDC).  It illustrates the ability to poll an EDC instance with HTTP GET requests.  This script can navigate EDC data streams and using the Activities API retrieve what data has been collected as individual activity files, or write them to a local MySQL database.  
 
-EDC data streams can be configured in a script configuration file.  Otherwise, there is a script method that can "discover" what streams are hosted on your EDC.  If you do not configure streams explicitly in your configuration file, the "discovery" method will be automatically triggered.  If you do not specify data streams in the configuration file, this discovery process gets triggered every time the script is launched.  
+EDC data streams can be configured in a script configuration file.  Otherwise, there is a  method that can "discover" what streams are hosted on your EDC.  If you do not configure streams explicitly in your configuration file, the "discovery" method will be automatically triggered.  If you do not specify data streams in the configuration file, this discovery process gets triggered every time the script is launched.  
 
 Once the script is started, it enters an endless "while true" loop, retrieving data on a user-specified interval (with a default of 60 seconds).   
 
@@ -55,7 +55,7 @@ Here are some important points:
 + In the "streams" section you have the option to explicitly list the EDC streams you want to collect data from. For each stream 
 	you need to specify its "ID" and provide a stream name:
 	
-	+ ID: the numeric ID assigned to the stream.  This ID can be referenced by navigating to the data stream with the EDC dashboard and noting the numeric ID in the URL, as in "https://myEDC.gnip.com/data_collectors/5.  Note that these stream IDs are not always consecutive, and there will be gaps in the ID sequence if you have deleted any streams during the life of your EDC. 
+	+ ID: the numeric ID assigned to the stream.  This ID can be referenced by navigating to the data stream with the EDC dashboard and noting the numeric ID in the URL, as in "https://myEDC.gnip.com/data_collectors/**5**.  Note that these stream IDs are not always consecutive, and there will be gaps in the ID sequence if you have deleted any streams during the life of your EDC. 
 		
 	+ Name: a label given to the stream to help you identify the stream in the configuration file.  This name is echoed in standard output as the script runs.
 
