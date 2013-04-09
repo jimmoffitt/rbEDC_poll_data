@@ -1,6 +1,6 @@
 
 '''
-A simple script to retrieve data from a Enterprise Data Collector (EDC).
+A simple script to poll data from a Enterprise Data Collector (EDC).
 
 This script can "self-discover" the current set of active EDC streams, or they can be statically
 configured in the EDC configuration file.
@@ -8,9 +8,7 @@ configured in the EDC configuration file.
 Currently, this script only handles normalized Activity Stream (ATOM) data formatted in XML.
 
 TODO:
-    [] Add in refreshURL logic/storage.
     [] Add support for original format (JSON).
-    [] Keep password configuration?
 
 '''
 require "base64"    #Used for basic password encryption.
